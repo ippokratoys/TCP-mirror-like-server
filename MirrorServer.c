@@ -77,34 +77,57 @@ FilesBuffer the_buffer;
 
 int fetch(BufferElement* file_info,char *folder_to_save){
     /*get the path of the new file*/
+    int offset=0;
     char path_file[2048];
     strcpy(path_file, folder_to_save);
     int strlen_dir=strlen(path_file);
     path_file[strlen_dir]='/';
-    strcpy(path_file+strlen_dir, file_info->a_file);
+    strcpy(path_file+strlen_dir+1, file_info->a_file);
+    int i;
+    for (i = strlen_dir+1; i < strlen(path_file); i++) {
+        if(path_file[i]=='/' ){
+            path_file[i]='?';
+        }
+    }
     printf("The full file:%s\n\n",path_file);
-
-    int my_copy_file=open(path_file,O_CREAT | O_TRUNC | O_WRONLY);
+    int my_copy_file=open(&path_file[offset],O_CREAT | O_TRUNC | O_WRONLY,0666);
     if(my_copy_file<0){
+        fprintf(stderr, "%s ", &path_file[offset]);
         perror("Can't open");
         return 3;
     }
-    close(my_copy_file);
-    return 0;
+    printf("FILE OPENED %s\n", &path_file[offset]);
+//    return 0;
     /*get a socket*/
     int file_transfer_socket;
     file_transfer_socket=socket(PF_INET, SOCK_STREAM, 0);
     if (file_transfer_socket<0){
         perror("socket in fetch");
+        close(my_copy_file);
         return 1;
     }
     /*connect to the address*/
     if( connect(file_transfer_socket,(struct sockaddr*) file_info->manager_info, sizeof(*file_info->manager_info))!=0 ){
         perror("Connecting fetch");
+        close(my_copy_file);
         close(file_transfer_socket);
         return 2;
     }
-
+    write_bytes(file_transfer_socket, "FETCH", 6);
+    int size_of_file=strlen(file_info->a_file)+1;
+    write_bytes(file_transfer_socket, &size_of_file , sizeof(int));
+    write_bytes(file_transfer_socket, file_info->a_file, size_of_file);
+    int bytes_read_now = 0;
+    int total_bytes_read = 0;
+    char buffer_sock[1024];
+    printf("start reading/writting\n");
+    while( (bytes_read_now=read(file_transfer_socket,buffer_sock, 1024))>0 ){
+        printf("Bytes:%d\n", bytes_read_now);
+        total_bytes_read+=bytes_read_now;
+        write_bytes(my_copy_file, buffer_sock, bytes_read_now);
+    }
+    printf("END FETCHING %s\n",path_file);
+    close(my_copy_file);
     close(file_transfer_socket);
     return 0;
 }
@@ -243,8 +266,13 @@ void *mirror_manager_thread(void* arg){
         }
         the_buffer.end=(the_buffer.end+1)%BUFF_SIZE;
         //save the dir name
+        int offset=0;
+        // if (strcmp(buffer_str, "./")==0) {
+        //     printf("YEAP\n");
+        //     offset=2;//cuts if needed the frist ./
+        // }
         the_buffer.communication_buffer[the_buffer.end].a_file=malloc(strlen(buffer_str)+1);
-        strcpy(the_buffer.communication_buffer[the_buffer.end].a_file,buffer_str);
+        strcpy(the_buffer.communication_buffer[the_buffer.end].a_file,&buffer_str[offset]);
         //save the network address
         the_buffer.communication_buffer[the_buffer.end].manager_info=malloc(sizeof(*servadd));
         memcpy(the_buffer.communication_buffer[the_buffer.end].manager_info,servadd,sizeof(*servadd));

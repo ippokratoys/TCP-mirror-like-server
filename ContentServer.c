@@ -1,3 +1,4 @@
+#include <fcntl.h>                 /*open the file to write*/
 #include <stdio.h>
 #include <stdlib.h>                               /* exit */
 #include <string.h>                             /* strlen */
@@ -50,7 +51,26 @@ int read_bytes(int fd,void *buff,int size){
 }
 
 int do_fetch(int server_fd){
-
+    int size_of_str;
+    read_bytes(server_fd, &size_of_str, sizeof(int));
+    char* file_to_sent_str=malloc(sizeof(char*)*size_of_str);
+    read_bytes(server_fd, file_to_sent_str, size_of_str);
+    printf("I will send back : %s\n",file_to_sent_str);
+    int file_to_sent_fd=open(file_to_sent_str,O_RDONLY);
+    if(file_to_sent_fd<0){
+        perror("Opening file");
+    }
+    printf("Opened OK\n");
+    char filebuffer[1024];
+    int num_of_bytes_read=0;
+    int total_num_of_bytes=0;
+    while ( (num_of_bytes_read=read(file_to_sent_fd, filebuffer, 1024))>0){
+        total_num_of_bytes+=num_of_bytes_read;
+        write_bytes(server_fd, filebuffer, num_of_bytes_read);
+    }
+    printf("Finished recievi\t SENT:%d\n",total_num_of_bytes);
+    close(file_to_sent_fd);
+    free(file_to_sent_str);
     return 0;
 }
 
@@ -152,6 +172,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "WHAT THE FUCK %s\n", buffer);
         }
         int dir_len;
+        close(cur_fd);
         // printf("New thing :%s\n", inet_ntoa(new_addr->sin_addr.s_addr));
     }
     return 0;
