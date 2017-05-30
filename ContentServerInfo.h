@@ -11,7 +11,11 @@ typedef struct ContentServer {
     int port;/*the ports that listens to*/
     char* dirorfile;/*the dir to fetch*/
     int delay;
+    int id;
 }ContentServer;
 
-
+typedef struct ConnectionId {
+    int id;//the id of the connection
+    int delay;//the delay of this connection
+}ConnectionId;
 #endif /* end of include guard: __CONTENT_SERVER_INFO */

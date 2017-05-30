@@ -1,0 +1,3 @@
+Change list to send an id instead of Direcory
+Compare the result of LIST with the first part of asked folder
+MAYBE NEED TO CHANGE THE mutexs

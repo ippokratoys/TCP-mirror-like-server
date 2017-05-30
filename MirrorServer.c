@@ -62,6 +62,7 @@ typedef struct BufferElement {
     char* a_file;//the full path of the file (or not)
     struct sockaddr_in* manager_info;//the info in order to open a socket
     int delay;//the delay
+    int id;
 }BufferElement;
 typedef  struct {
     BufferElement communication_buffer[BUFF_SIZE];
@@ -115,18 +116,25 @@ int fetch(BufferElement* file_info,char *folder_to_save){
     }
     write_bytes(file_transfer_socket, "FETCH", 6);
     int size_of_file=strlen(file_info->a_file)+1;
+    //lenfth of directory
     write_bytes(file_transfer_socket, &size_of_file , sizeof(int));
+    //the directory
     write_bytes(file_transfer_socket, file_info->a_file, size_of_file);
+    //send the token
+    ConnectionId the_token;
+    the_token.delay=file_info->delay;
+    the_token.id=file_info->id;
+    write_bytes(file_transfer_socket, &the_token, sizeof(ConnectionId));
     int bytes_read_now = 0;
     int total_bytes_read = 0;
     char buffer_sock[1024];
     printf("start reading/writting\n");
     while( (bytes_read_now=read(file_transfer_socket,buffer_sock, 1024))>0 ){
-        printf("Bytes:%d\n", bytes_read_now);
+//        printf("Bytes:%d\n", bytes_read_now);
         total_bytes_read+=bytes_read_now;
         write_bytes(my_copy_file, buffer_sock, bytes_read_now);
     }
-    printf("END FETCHING %s\n",path_file);
+    printf("END FETCHING size:%d %s\n\n",total_bytes_read,path_file);
     close(my_copy_file);
     close(file_transfer_socket);
     return 0;
@@ -228,12 +236,18 @@ void *mirror_manager_thread(void* arg){
     printf("DONE!\n");
     //write the command name
     write_bytes(my_content_server_sock, "LIST ", 6);
-    //write the length of the dir name element
-    int dir_name_size=strlen(my_infos->dirorfile)+1;
-    write_bytes(my_content_server_sock, &dir_name_size, sizeof(int));
-    //then write the dir name in did
-    write_bytes(my_content_server_sock, my_infos->dirorfile, dir_name_size);//write the directory name
-    write_bytes(my_content_server_sock, &my_infos->delay, sizeof(int));//write the delay
+    // //write the length of the dir name element
+    // int dir_name_size=strlen(my_infos->dirorfile)+1;
+    // write_bytes(my_content_server_sock, &dir_name_size, sizeof(int));
+    // //then write the dir name in did
+    // write_bytes(my_content_server_sock, my_infos->dirorfile, dir_name_size);//write the directory name
+    //
+    // write_bytes(my_content_server_sock, &my_infos->delay, sizeof(int));//write the delay
+    ConnectionId connection_token;
+    connection_token.id=my_infos->id;
+    connection_token.delay=my_infos->delay;
+    write_bytes(my_content_server_sock,&connection_token,sizeof(ConnectionId));
+
     //get the reply from the Content Server
     char buffer_str[1024];
     FILE* remote_ls_fp=fdopen(my_content_server_sock,"r+");
@@ -246,13 +260,14 @@ void *mirror_manager_thread(void* arg){
         int next_element_size=0;//read the size of the string
         if(fgets(buffer_str, 1023, remote_ls_fp)==NULL){
             //end of input
-            if (num_of_files==0) {
+            if(num_of_files==0){
                 //no files found or folder don't exists
                 printf("Nothing found\n");
             }
             break;
         }
         if(buffer_str[0]=='\0')continue;
+        if(strstr(buffer_str, my_infos->dirorfile)==NULL)continue;//if the file is a subfolder of what we need
         num_of_files++;
         //buffer_str ends with \n\0
         buffer_str[strlen(buffer_str)-1]='\0';
@@ -272,6 +287,8 @@ void *mirror_manager_thread(void* arg){
         //     offset=2;//cuts if needed the frist ./
         // }
         the_buffer.communication_buffer[the_buffer.end].a_file=malloc(strlen(buffer_str)+1);
+        the_buffer.communication_buffer[the_buffer.end].id=my_infos->id;
+        the_buffer.communication_buffer[the_buffer.end].delay=my_infos->delay;
         strcpy(the_buffer.communication_buffer[the_buffer.end].a_file,&buffer_str[offset]);
         //save the network address
         the_buffer.communication_buffer[the_buffer.end].manager_info=malloc(sizeof(*servadd));
@@ -383,13 +400,13 @@ int main(int argc, char *argv[]) {
 
    init_conditions(number_of_elements);
    init_workers(num_of_threads,buff_dirname);
-
-   for (size_t j = 0; j < number_of_elements; j++) {
+   for (j = 0; j < number_of_elements; j++) {
        printf("Read one\n");
 //get the delay and the port
        read_bytes(initiator_fd, &my_content_servers[j], sizeof(ContentServer));
        my_content_servers[j].dirorfile=NULL;
        my_content_servers[j].name_of_server=NULL;
+       my_content_servers[j].id=j;
 //get the strings(first size then the string)
 //directory/file name
        int size_of_dir_name=0,size_of_host_name=0;
@@ -408,8 +425,8 @@ int main(int argc, char *argv[]) {
        int return_result;
        printf("next\n");
    }
-   for (size_t i = 0; i < number_of_elements; i++) {
-       printf("Adress:%s\t", my_content_servers[j].name_of_server );
+   for (i = 0; i < number_of_elements; i++) {
+       printf("Adress:%s\t", my_content_servers[i].name_of_server );
        printf("\tPort:%d \t Dir:%s \t Delay:%d\n",my_content_servers[i].port,my_content_servers[i].dirorfile,my_content_servers[i].delay );
        pthread_t thr_p;
        if(pthread_create(&thr_p, NULL, (void*) mirror_manager_thread, &my_content_servers[i])!=0){

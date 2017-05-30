@@ -9,7 +9,7 @@
 #include <netdb.h>                       /* gethostbyname */
 #include <arpa/inet.h>
 #include <errno.h>
-
+#include "ContentServerInfo.h"
 void perror_exit(char *message) {
     perror(message);
     exit(EXIT_FAILURE);
@@ -52,10 +52,16 @@ int read_bytes(int fd,void *buff,int size){
 
 int do_fetch(int server_fd){
     int size_of_str;
+    //read the len of asked dir
     read_bytes(server_fd, &size_of_str, sizeof(int));
+    //allocate the size and read
     char* file_to_sent_str=malloc(sizeof(char*)*size_of_str);
     read_bytes(server_fd, file_to_sent_str, size_of_str);
-    printf("I will send back : %s\n",file_to_sent_str);
+    //read the token
+    ConnectionId token_info;
+    read_bytes(server_fd, &token_info, sizeof(ConnectionId));
+    printf("I will send back : %s \t with delay:%d\n",file_to_sent_str,token_info.delay);
+    sleep(token_info.delay);
     int file_to_sent_fd=open(file_to_sent_str,O_RDONLY);
     if(file_to_sent_fd<0){
         perror("Opening file");
@@ -74,19 +80,24 @@ int do_fetch(int server_fd){
     return 0;
 }
 
-int do_list(int server_fd){
+int do_list(int server_fd,char* my_dir){
     char buffer[1024];
     int read_len;
-    read_bytes(server_fd, &read_len, sizeof(int));
-    //get the dir name
-    read_bytes(server_fd, buffer, read_len);
-    //get the delay
-    int delay=0;
-    read_bytes(server_fd, &delay, sizeof(int));
-    printf("DIR:%s Delay:%d\n",buffer,delay);
+    // //get the dir len
+    // read_bytes(server_fd, &read_len, sizeof(int));
+    // //get the dir name
+    // read_bytes(server_fd, buffer, read_len);
+    // //get the delay
+    // int delay=0;
+    // read_bytes(server_fd, &delay, sizeof(int));
+    ConnectionId token_info;
+    read_bytes(server_fd, &token_info, sizeof(ConnectionId));
+    // printf("DIR:%s/%s Delay:%d\n",my_dir,buffer,delay);
     //create the ls
-    char the_command[1024];
-    sprintf(the_command, "find %s -type f",buffer);
+    char the_command[1024];the_command[0]='\0';
+    // sprintf(the_command, "find %s/%s -type f",my_dir,buffer);
+    sprintf(the_command, "find %s -type f",my_dir);
+
     // printf("The find command:%s\n",the_command);
     //do the ls with popen
     FILE* the_list=popen(the_command,"r");
@@ -163,7 +174,7 @@ int main(int argc, char *argv[]) {
         //read the command
         read_bytes(cur_fd,buffer , 6);
         if(strcmp(buffer, "LIST ")==0){
-            do_list(cur_fd);
+            do_list(cur_fd,content_dirname);
             close(cur_fd);
             //get the size of the dir
         }else if(strcmp(buffer, "FETCH")==0){
