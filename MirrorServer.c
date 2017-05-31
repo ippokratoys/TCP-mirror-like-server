@@ -3,7 +3,7 @@
 #include <stdlib.h>                               /* exit */
 #include <string.h>                             /* strlen */
 #include <unistd.h>                      /* STDOUT_FILENO */
-#include  <pthread.h>                      /* For threads */
+#include <pthread.h>                       /* For threads */
 #include <sys/stat.h>                      /*for dir check*/
 #include <sys/types.h>                         /* sockets */
 #include <sys/socket.h>                        /* sockets */
@@ -56,8 +56,12 @@ int write_bytes(int fd, void *buff, int size) {
 /* Buffer bariables and mutexs*/
 int number_of_active_manager=-1;
 int number_of_worker_thread=-1;
+int num_files_fetched=0;
+int num_bytes_fetched=0;
+int worker_in=0;
+int manager_in=0;
 int first_empty=0;
-#define BUFF_SIZE 3
+#define BUFF_SIZE 100
 typedef struct BufferElement {
     char* a_file;//the full path of the file (or not)
     struct sockaddr_in* manager_info;//the info in order to open a socket
@@ -135,6 +139,8 @@ int fetch(BufferElement* file_info,char *folder_to_save){
         write_bytes(my_copy_file, buffer_sock, bytes_read_now);
     }
     printf("END FETCHING size:%d %s\n\n",total_bytes_read,path_file);
+    num_files_fetched++;
+    num_bytes_fetched+=total_bytes_read;
     close(my_copy_file);
     close(file_transfer_socket);
     return 0;
@@ -148,8 +154,8 @@ void *worker_thread(void* arg){//takes as argument the dir where to save the fil
     BufferElement cur_buffer_elem;
     while(1){
         pthread_mutex_lock(&buffer_lock);
-        while(the_buffer.count==0){
-            if(number_of_active_manager<=0){
+        while(the_buffer.count<=0 || worker_in>0 || manager_in>0){
+            if(number_of_active_manager<=0 && the_buffer.count<=0){
                 //no workers running and buffer empty
                 pthread_cond_broadcast(&not_empty);
                 pthread_mutex_unlock(&buffer_lock);
@@ -161,13 +167,20 @@ void *worker_thread(void* arg){//takes as argument the dir where to save the fil
             }
             pthread_cond_wait(&not_empty, &buffer_lock);
         }
+        worker_in++;
+        pthread_mutex_unlock(&buffer_lock);
+        //do the reading
         memcpy(&cur_buffer_elem,&the_buffer.communication_buffer[the_buffer.start],sizeof(BufferElement));
+        printf("(%d)(%d)I supose to fetch %s\n",number_of_active_manager,the_buffer.count,cur_buffer_elem.a_file);
+
+        pthread_mutex_lock(&buffer_lock);
+        worker_in--;
         the_buffer.count--;
         the_buffer.start = (the_buffer.start+1)%BUFF_SIZE;
         pthread_cond_signal(&not_full);
         pthread_mutex_unlock(&buffer_lock);
+
         //do the fetch of the file from cur_buffer_elem
-        printf("(%d)(%d)I supose to fetch %s\n",number_of_active_manager,the_buffer.count,cur_buffer_elem.a_file);
         int return_of_fetch=fetch(&cur_buffer_elem,arg);
 
         free(cur_buffer_elem.a_file);
@@ -212,7 +225,8 @@ void *mirror_manager_thread(void* arg){
     if(hosthp==NULL){
         return_result=NOT_FOUND;
         printf("ip NOT ok |%s|\t",my_infos->name_of_server);
-        perror_exit("get by name");//MUST CHANGE TTHIS
+        perror("get by name");//MUST CHANGE TTHIS
+        pthread_exit(NULL);
         // write_bytes(initiator_fd,&return_result,sizeof(int));
         //and exit the thread returning not found
     }
@@ -252,7 +266,8 @@ void *mirror_manager_thread(void* arg){
     char buffer_str[1024];
     FILE* remote_ls_fp=fdopen(my_content_server_sock,"r+");
     if(remote_ls_fp==NULL){
-        perror_exit("fdopen");
+        perror("fdopen");
+        pthread_exit(NULL);
     }
     int num_of_files=0;
     while(1){
@@ -276,9 +291,12 @@ void *mirror_manager_thread(void* arg){
 
         //get the lock
         pthread_mutex_lock(&buffer_lock);
-        while(the_buffer.count>=BUFF_SIZE){
+        while(the_buffer.count>=BUFF_SIZE || manager_in>0 || worker_in>0){
             pthread_cond_wait(&not_full, &buffer_lock);
         }
+        manager_in++;
+        pthread_mutex_unlock(&buffer_lock);
+
         the_buffer.end=(the_buffer.end+1)%BUFF_SIZE;
         //save the dir name
         int offset=0;
@@ -293,17 +311,21 @@ void *mirror_manager_thread(void* arg){
         //save the network address
         the_buffer.communication_buffer[the_buffer.end].manager_info=malloc(sizeof(*servadd));
         memcpy(the_buffer.communication_buffer[the_buffer.end].manager_info,servadd,sizeof(*servadd));
-        printf("Wrote %s\n", the_buffer.communication_buffer[the_buffer.end].a_file );
+        printf("Wrote(manager) %s\n", the_buffer.communication_buffer[the_buffer.end].a_file );
         the_buffer.count++;
 
-        pthread_mutex_unlock(&buffer_lock);
+
+        pthread_mutex_lock(&buffer_lock);
+        manager_in--;
         pthread_cond_signal(&not_empty);
+        pthread_mutex_unlock(&buffer_lock);
         //free the lock
     }
     number_of_active_manager--;
     pthread_cond_signal(&not_empty);//so if someone waits to place somting wakes up to see that this is the end
     printf("!!END MIRRO manager  %ld \n",pthread_self());
     fclose(remote_ls_fp);//close the socket
+    pthread_exit(NULL);
 //    write_bytes(initiator_fd,&return_result,sizeof(int));
 }
 
@@ -326,7 +348,10 @@ int isDirectory(const char *path) {
     }
     return S_ISDIR(statbuf.st_mode);
 }
-
+void print_statics(){
+    printf("Files recieved : %d\n", num_files_fetched);
+    printf("Bytes recieved : %d\n", num_bytes_fetched);
+}
 int main(int argc, char *argv[]) {
     int i;
     char* buff_dirname=NULL;
@@ -445,6 +470,7 @@ int main(int argc, char *argv[]) {
    //destroy mutex and conditions
    // mirror_manager_thread(my_content_servers);
    printf("Main thread FINISHED\n");
+   print_statics();
    pthread_exit(NULL);
 }
 

@@ -7,6 +7,7 @@
 #include <sys/socket.h>                        /* sockets */
 #include <netinet/in.h>               /* internet sockets */
 #include <netdb.h>                       /* gethostbyname */
+#include <pthread.h>                       /* For threads */
 #include <arpa/inet.h>
 #include <errno.h>
 #include "ContentServerInfo.h"
@@ -14,7 +15,7 @@ void perror_exit(char *message) {
     perror(message);
     exit(EXIT_FAILURE);
 }
-
+char *working_dir;//the directory that get as argument
 void problem_arguments(char* my_msg){
     if(my_msg!=NULL){
         printf("%s\n",my_msg);
@@ -50,7 +51,8 @@ int read_bytes(int fd,void *buff,int size){
     return all_read;
 }
 
-int do_fetch(int server_fd){
+void *do_fetch(void *arg){
+    int server_fd=*((int*) arg);
     int size_of_str;
     //read the len of asked dir
     read_bytes(server_fd, &size_of_str, sizeof(int));
@@ -65,6 +67,8 @@ int do_fetch(int server_fd){
     int file_to_sent_fd=open(file_to_sent_str,O_RDONLY);
     if(file_to_sent_fd<0){
         perror("Opening file");
+        close(server_fd);
+        pthread_exit(NULL);
     }
     printf("Opened OK\n");
     char filebuffer[1024];
@@ -75,12 +79,15 @@ int do_fetch(int server_fd){
         write_bytes(server_fd, filebuffer, num_of_bytes_read);
     }
     printf("Finished recievi\t SENT:%d\n",total_num_of_bytes);
+    close(server_fd);
+    free(arg);
     close(file_to_sent_fd);
     free(file_to_sent_str);
-    return 0;
+    pthread_exit(NULL);
 }
 
-int do_list(int server_fd,char* my_dir){
+void *do_list(void* arg){
+    int server_fd=*((int*) arg);
     char buffer[1024];
     int read_len;
     // //get the dir len
@@ -92,11 +99,11 @@ int do_list(int server_fd,char* my_dir){
     // read_bytes(server_fd, &delay, sizeof(int));
     ConnectionId token_info;
     read_bytes(server_fd, &token_info, sizeof(ConnectionId));
-    // printf("DIR:%s/%s Delay:%d\n",my_dir,buffer,delay);
+    // printf("DIR:%s/%s Delay:%d\n",working_dir,buffer,delay);
     //create the ls
     char the_command[1024];the_command[0]='\0';
-    // sprintf(the_command, "find %s/%s -type f",my_dir,buffer);
-    sprintf(the_command, "find %s -type f",my_dir);
+    // sprintf(the_command, "find %s/%s -type f",working_dir,buffer);
+    sprintf(the_command, "find %s -type f",working_dir);
 
     // printf("The find command:%s\n",the_command);
     //do the ls with popen
@@ -119,13 +126,17 @@ int do_list(int server_fd,char* my_dir){
     }
     //finish
     read_len=0;
-    write(server_fd, &read_len, sizeof(int));
+    write(server_fd, &read_len, sizeof(int)); //maybe i need this line
+    close(server_fd);
+    free(arg);
     pclose(the_list);
-    return 0;
+    pthread_exit(NULL);
+//    return 0;
 }
 
 int main(int argc, char *argv[]) {
     int i;
+    working_dir=NULL;
     char* content_dirname=NULL;
     int port=-1;
     for(i=1;i<argc;i++){
@@ -135,10 +146,15 @@ int main(int argc, char *argv[]) {
         }else if(strcmp(argv[i],"-d")==0){
             i++;if(argc==i)break;//if next arguemnt doesn't exitst
             content_dirname=argv[i];
+            working_dir=content_dirname;
         }else{
             problem_arguments(argv[i]);
             exit(-1);
         }
+    }
+    if(working_dir==NULL){
+        fprintf(stderr,"I need argumet for directory");
+        return 1;
     }
     printf("Port:%d Direcory:%s\n",port,content_dirname );
     int l_sock;//the listen socket
@@ -173,17 +189,23 @@ int main(int argc, char *argv[]) {
         printf("New connecton from(%d):%s\n",new_sock_len, inet_ntoa(new_addr->sin_addr));
         //read the command
         read_bytes(cur_fd,buffer , 6);
+        int* send_arg=malloc(sizeof(int));
+        *send_arg=cur_fd;
+        pthread_t thread_id;
         if(strcmp(buffer, "LIST ")==0){
-            do_list(cur_fd,content_dirname);
-            close(cur_fd);
+            pthread_create(&thread_id, NULL, do_list, send_arg);
+            pthread_detach(thread_id);
+//            do_list(cur_fd);
             //get the size of the dir
         }else if(strcmp(buffer, "FETCH")==0){
-            do_fetch(cur_fd);
+            pthread_create(&thread_id, NULL, do_fetch, send_arg);
+            pthread_detach(thread_id);
+//            do_fetch(cur_fd);
         }else{
             fprintf(stderr, "WHAT THE FUCK %s\n", buffer);
         }
         int dir_len;
-        close(cur_fd);
+        // close(cur_fd);
         // printf("New thing :%s\n", inet_ntoa(new_addr->sin_addr.s_addr));
     }
     return 0;
