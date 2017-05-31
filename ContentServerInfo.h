@@ -18,4 +18,11 @@ typedef struct ConnectionId {
     int id;//the id of the connection
     int delay;//the delay of this connection
 }ConnectionId;
+
+typedef struct {
+    int num_of_files;
+    int num_of_bytes;
+    int average;
+    int distribution;
+}Statics;
 #endif /* end of include guard: __CONTENT_SERVER_INFO */

@@ -92,6 +92,13 @@ ContentServer* get_content_servers(char* all_servers,int* num_of_servers){
     return all_content_servers;
 }
 
+void print_statics(Statics *my_statistics){
+    printf("Number of files   : %d\n", my_statistics->num_of_files);
+    printf("Number of bytes   : %d\n", my_statistics->num_of_bytes);
+    printf("Average file size : %d\n", my_statistics->average);
+
+    printf("Distribution   : %d\n", my_statistics->distribution);
+}
 int main(int argc,char* argv[]){
     int i;
     char buffer[2048];
@@ -181,6 +188,9 @@ int main(int argc,char* argv[]){
         // read_bytes(sock, &status_send, sizeof(int));
         // printf("READ : %d\n", status_send);
     }
+    Statics my_statics;
+    read_bytes(sock, &my_statics, sizeof(Statics));
+    print_statics(&my_statics);
     // write_bytes(sock, "my_content_servers", int size)
     /* Step 4: read back results and send them to stdout */
 

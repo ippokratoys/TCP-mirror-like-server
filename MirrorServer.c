@@ -470,7 +470,15 @@ int main(int argc, char *argv[]) {
    //destroy mutex and conditions
    // mirror_manager_thread(my_content_servers);
    printf("Main thread FINISHED\n");
+   Statics my_statistics;
+   my_statistics.num_of_files=num_files_fetched;
+   my_statistics.num_of_bytes=num_bytes_fetched;
+   if(num_files_fetched!=0){
+       my_statistics.average=num_bytes_fetched/num_files_fetched;
+   }
    print_statics();
+   write_bytes(initiator_fd, &my_statistics, sizeof(Statics));
+   close(initiator_fd);
    pthread_exit(NULL);
 }
 
