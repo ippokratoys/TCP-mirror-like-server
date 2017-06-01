@@ -214,6 +214,57 @@ int init_workers(int num_of_workers,char* dir_to_save){
         pthread_detach(thr_p);
     }
 }
+
+//my creation of mkdir -p
+int create_folders(char *cur,char* next,char* full_path,char* id_str){
+    char* get_cur;
+    char* get_next;
+    if(cur==NULL){//first time
+        printf("First time\n");
+        char* first_cur=strtok_r(full_path,"/",&id_str);//initialize
+        printf("End with init\n" );
+        if(first_cur==NULL)return 0;
+        cur=malloc(sizeof(char)*1024);
+        strcpy(cur, first_cur);
+        char* first_next=strtok_r(NULL,"/",&id_str);//get the cur element
+        if(first_next==NULL){
+            free(cur);
+            return 0;
+        }
+        next=malloc(sizeof(char)*1024);
+        strcpy(next, first_next);
+    }
+
+    if(next==NULL || strlen(next)==0 || next[0]=='\0'){//if there is nothing next it means that this is the file no nead to create
+        free(cur);
+        free(next);
+        return 1;
+    }
+    char the_path[1024];
+    sprintf(&the_path, "%s",cur);
+    printf("%s\n",the_path);
+    if(mkdir(the_path, 0777)!=0 && errno!=EEXIST){
+        perror("mkdir ");
+        return 0;
+    }
+
+    char* arg_new_next;
+    char* new_next=strtok_r(NULL,"/",&id_str);
+    arg_new_next=malloc(1024);
+    if(new_next==NULL){
+        arg_new_next[0]='\0';
+    }else{
+        strcpy(arg_new_next, new_next);
+    }
+
+    char* arg_new_cur=malloc(sizeof(char)*1024);
+    sprintf(arg_new_cur, "%s/%s",cur,next);
+    free(cur);
+    free(next);
+    //recursive call to his self with changin the current path to the old one extended with old_next
+    //and new_next to be the new
+    create_folders(arg_new_cur, arg_new_next, full_path, id_str);
+}
 void *mirror_manager_thread(void* arg){
     ContentServer* my_infos=(ContentServer *) arg;
     int j;
@@ -353,6 +404,11 @@ void print_statics(){
     printf("Bytes recieved : %d\n", num_bytes_fetched);
 }
 int main(int argc, char *argv[]) {
+    char *my_folder=malloc(sizeof(char)*1024);
+    strcpy(my_folder, "ServerOutput/add/me/on/facebook.txt");
+    create_folders(NULL, NULL, my_folder, NULL);
+    free(my_folder);
+    return 0;
     int i;
     char* buff_dirname=NULL;
     int num_of_threads=-1,port=-1;
