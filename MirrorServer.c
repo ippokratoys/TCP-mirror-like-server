@@ -53,11 +53,18 @@ int write_bytes(int fd, void *buff, int size) {
     }
     return sent;
 }
+
 /* Buffer bariables and mutexs*/
 int number_of_active_manager=-1;
 int number_of_worker_thread=-1;
+
 int num_files_fetched=0;
 int num_bytes_fetched=0;
+int* all_files_size;
+int size_of_array=0;
+static pthread_mutex_t mtx_size_of_files=PTHREAD_MUTEX_INITIALIZER;
+
+
 int worker_in=0;
 int manager_in=0;
 int first_empty=0;
@@ -74,11 +81,13 @@ typedef  struct {
     int end;
     int count;
 } FilesBuffer;
-static pthread_mutex_t buffer_lock;
+static pthread_mutex_t buffer_lock=PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_finished;
 pthread_cond_t not_full;
 pthread_cond_t not_empty;
 FilesBuffer the_buffer;
+char *glb_buff_dirname;
+
 
 int fetch(BufferElement* file_info,char *folder_to_save){
     /*get the path of the new file*/
@@ -89,11 +98,11 @@ int fetch(BufferElement* file_info,char *folder_to_save){
     path_file[strlen_dir]='/';
     strcpy(path_file+strlen_dir+1, file_info->a_file);
     int i;
-    for (i = strlen_dir+1; i < strlen(path_file); i++) {
-        if(path_file[i]=='/' ){
-            path_file[i]='?';
-        }
-    }
+    // for (i = strlen_dir+1; i < strlen(path_file); i++) {
+    //     if(path_file[i]=='/' ){
+    //         path_file[i]='?';
+    //     }
+    // }
     printf("The full file:%s\n\n",path_file);
     int my_copy_file=open(&path_file[offset],O_CREAT | O_TRUNC | O_WRONLY,0666);
     if(my_copy_file<0){
@@ -139,8 +148,19 @@ int fetch(BufferElement* file_info,char *folder_to_save){
         write_bytes(my_copy_file, buffer_sock, bytes_read_now);
     }
     printf("END FETCHING size:%d %s\n\n",total_bytes_read,path_file);
+    pthread_mutex_lock(&mtx_size_of_files);
+    if(num_files_fetched==size_of_array){
+        size_of_array+=10;
+        printf("REALLOC!!!\n" );
+        if( ( all_files_size=realloc(all_files_size, sizeof(int)*size_of_array) )==NULL){
+            perror("Realloc");
+        }
+        printf("DOOOONE\n\n" );
+    }
+    all_files_size[num_files_fetched]=total_bytes_read;
     num_files_fetched++;
     num_bytes_fetched+=total_bytes_read;
+    pthread_mutex_unlock(&mtx_size_of_files);
     close(my_copy_file);
     close(file_transfer_socket);
     return 0;
@@ -195,7 +215,15 @@ int init_conditions(int number_of_manager){
     the_buffer.start=0;
     the_buffer.end=-1;
     the_buffer.count=0;
+
+    num_files_fetched=0;
+    num_bytes_fetched=0;
+    size_of_array=10;
+    all_files_size=malloc((sizeof(int)*size_of_array));
+
     number_of_active_manager=number_of_manager;
+    // mtx_size_of_files=PTHREAD_MUTEX_INITIALIZER;
+    // buffer_lock=PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_init(&cond_finished, 0);
     pthread_cond_init(&not_full, 0);
     pthread_cond_init(&not_empty, 0);
@@ -241,7 +269,7 @@ int create_folders(char *cur,char* next,char* full_path,char* id_str){
         return 1;
     }
     char the_path[1024];
-    sprintf(&the_path, "%s",cur);
+    sprintf(the_path, "%s",cur);
     printf("%s\n",the_path);
     if(mkdir(the_path, 0777)!=0 && errno!=EEXIST){
         perror("mkdir ");
@@ -265,6 +293,24 @@ int create_folders(char *cur,char* next,char* full_path,char* id_str){
     //and new_next to be the new
     create_folders(arg_new_cur, arg_new_next, full_path, id_str);
 }
+
+void rec_mkdir(const char *dir) {
+    char tmp[256];
+    char *p = NULL;
+    size_t len;
+    snprintf(tmp, sizeof(tmp),"%s",dir);
+    len = strlen(tmp);
+    if(tmp[len - 1] == '/')
+            tmp[len - 1] = 0;
+    for(p = tmp + 1; *p; p++)
+            if(*p == '/') {
+                    *p = 0;
+                    mkdir(tmp, S_IRWXU);
+                    *p = '/';
+            }
+    mkdir(tmp, S_IRWXU);
+}
+
 void *mirror_manager_thread(void* arg){
     ContentServer* my_infos=(ContentServer *) arg;
     int j;
@@ -347,7 +393,20 @@ void *mirror_manager_thread(void* arg){
         }
         manager_in++;
         pthread_mutex_unlock(&buffer_lock);
-
+//        create_folders(NULL, NULL, buffer_str, NULL);
+        int i;
+        char the_path[1024];
+        sprintf(the_path, "%s/%s",glb_buff_dirname,buffer_str);
+        for (i = strlen(the_path); i >=1; i--) {
+            if(the_path[i]=='/'){//change the sring and keek only the directory
+                the_path[i]='\0';
+                break;
+            }
+        }
+        if(i!=0){
+            rec_mkdir(the_path);
+            the_path[i]='/';
+        }
         the_buffer.end=(the_buffer.end+1)%BUFF_SIZE;
         //save the dir name
         int offset=0;
@@ -399,16 +458,25 @@ int isDirectory(const char *path) {
     }
     return S_ISDIR(statbuf.st_mode);
 }
-void print_statics(){
+
+int print_statics(){
     printf("Files recieved : %d\n", num_files_fetched);
     printf("Bytes recieved : %d\n", num_bytes_fetched);
+    // int i;
+    // diff_from_mean=0;
+    // for(i=0;i<num_files_fetched;i++){
+    //     diff_from_mean=all_files_size[i];
+    //     printf("%d)%d\n",i,all_files_size[i] );
+    // }
 }
+
 int main(int argc, char *argv[]) {
-    char *my_folder=malloc(sizeof(char)*1024);
-    strcpy(my_folder, "ServerOutput/add/me/on/facebook.txt");
-    create_folders(NULL, NULL, my_folder, NULL);
-    free(my_folder);
-    return 0;
+//     char *my_folder=malloc(sizeof(char)*1024);
+//     strcpy(my_folder, "ServerOutput/add/me/on/facebook.txt");
+// //    create_folders(NULL, NULL, my_folder, NULL);
+//     rec_mkdir(my_folder);
+//     free(my_folder);
+//     return 0;
     int i;
     char* buff_dirname=NULL;
     int num_of_threads=-1,port=-1;
@@ -425,6 +493,7 @@ int main(int argc, char *argv[]) {
                 problem_arguments(NULL);
                 exit(-1);
             }
+            glb_buff_dirname=buff_dirname;
 
         }else if(strcmp(argv[i],"-w")==0){
             i++;if(argc==i)break;//if next arguemnt doesn't exitst
@@ -531,10 +600,20 @@ int main(int argc, char *argv[]) {
    my_statistics.num_of_bytes=num_bytes_fetched;
    if(num_files_fetched!=0){
        my_statistics.average=num_bytes_fetched/num_files_fetched;
+       int diff_from_mean=0;
+       for(i=0;i<num_files_fetched;i++){
+           diff_from_mean=(all_files_size[i]-my_statistics.average)*(all_files_size[i]-my_statistics.average);
+
+           printf("%d)%d\n",i,all_files_size[i] );
+       }
+       my_statistics.distribution=diff_from_mean/num_files_fetched;
    }
-   print_statics();
+//   print_statics();
    write_bytes(initiator_fd, &my_statistics, sizeof(Statics));
    close(initiator_fd);
+   shutdown(lsock, SHUT_RDWR);
+   close(lsock);
+   free(all_files_size);
    pthread_exit(NULL);
 }
 
