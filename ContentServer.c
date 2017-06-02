@@ -11,6 +11,13 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include "ContentServerInfo.h"
+
+int size_of_array;
+int* id_delay;
+int num_of_records;
+//the mutex nessesary only from LIST thread
+pthread_mutex_t mtx_array=PTHREAD_MUTEX_INITIALIZER;
+
 void perror_exit(char *message) {
     perror(message);
     exit(EXIT_FAILURE);
@@ -26,6 +33,11 @@ void problem_arguments(char* my_msg){
     printf("\t ContentServerPort  : The port that the server listens to\n");
 }
 
+void init_id_array(){
+    size_of_array=2;
+    id_delay=malloc(sizeof(int)*size_of_array);
+    num_of_records=0;
+}
 
 /*writes form the buff size bytes to the fd
 returs bytes that had been written*/
@@ -62,8 +74,16 @@ void *do_fetch(void *arg){
     //read the token
     ConnectionId token_info;
     read_bytes(server_fd, &token_info, sizeof(ConnectionId));
-    printf("I will send back : %s \t with delay:%d\n",file_to_sent_str,token_info.delay);
-    sleep(token_info.delay);
+    int i;
+    for ( i = 0; i < num_of_records; i+=2) {
+        if(id_delay[i]==token_info.id){
+            printf("I will sleep %d\n", id_delay[i+1]);
+            sleep(id_delay[i+1]);
+            break;
+        }
+    }
+    printf("I will send back : %s \t with delay:%d\n",file_to_sent_str,id_delay[i+1]);
+    // sleep(token_info.delay);
     int file_to_sent_fd=open(file_to_sent_str,O_RDONLY);
     if(file_to_sent_fd<0){
         perror("Opening file");
@@ -100,6 +120,15 @@ void *do_list(void* arg){
     ConnectionId token_info;
     read_bytes(server_fd, &token_info, sizeof(ConnectionId));
     // printf("DIR:%s/%s Delay:%d\n",working_dir,buffer,delay);
+    pthread_mutex_lock(&mtx_array);
+    if(num_of_records==size_of_array){
+        size_of_array+=20;
+        id_delay=realloc(id_delay, size_of_array);
+    }
+    id_delay[num_of_records]=token_info.id;
+    id_delay[num_of_records+1]=token_info.delay;
+    num_of_records+=2;
+    pthread_mutex_unlock(&mtx_array);
     //create the ls
     char the_command[1024];the_command[0]='\0';
     // sprintf(the_command, "find %s/%s -type f",working_dir,buffer);

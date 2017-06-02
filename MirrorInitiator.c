@@ -85,7 +85,7 @@ ContentServer* get_content_servers(char* all_servers,int* num_of_servers){
         written++;//
 
         if(written==size)
-            if(realloc(all_content_servers, size=size+10))//if it's full, make new possitions
+            if((all_content_servers=realloc(all_content_servers, size=size+10))==NULL)//if it's full, make new possitions
                 perror("realoc");
     }
     if(num_of_servers!=NULL)*num_of_servers=written;

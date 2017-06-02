@@ -137,6 +137,7 @@ int fetch(BufferElement* file_info,char *folder_to_save){
     ConnectionId the_token;
     the_token.delay=file_info->delay;
     the_token.id=file_info->id;
+    printf("%d,%d\n", file_info->id,file_info->delay);
     write_bytes(file_transfer_socket, &the_token, sizeof(ConnectionId));
     int bytes_read_now = 0;
     int total_bytes_read = 0;
@@ -612,6 +613,7 @@ int main(int argc, char *argv[]) {
    write_bytes(initiator_fd, &my_statistics, sizeof(Statics));
    close(initiator_fd);
    shutdown(lsock, SHUT_RDWR);
+   perror("shutdown");
    close(lsock);
    free(all_files_size);
    pthread_exit(NULL);
