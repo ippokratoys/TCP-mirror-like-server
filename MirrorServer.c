@@ -103,14 +103,14 @@ int fetch(BufferElement* file_info,char *folder_to_save){
     //         path_file[i]='?';
     //     }
     // }
-    printf("The full file:%s\n\n",path_file);
+    // printf("The full file:%s\n\n",path_file);
     int my_copy_file=open(&path_file[offset],O_CREAT | O_TRUNC | O_WRONLY,0666);
     if(my_copy_file<0){
         fprintf(stderr, "%s ", &path_file[offset]);
         perror("Can't open");
         return 3;
     }
-    printf("FILE OPENED %s\n", &path_file[offset]);
+    // printf("FILE OPENED %s\n", &path_file[offset]);
 //    return 0;
     /*get a socket*/
     int file_transfer_socket;
@@ -137,26 +137,26 @@ int fetch(BufferElement* file_info,char *folder_to_save){
     ConnectionId the_token;
     the_token.delay=file_info->delay;
     the_token.id=file_info->id;
-    printf("%d,%d\n", file_info->id,file_info->delay);
+    // printf("%d,%d\n", file_info->id,file_info->delay);
     write_bytes(file_transfer_socket, &the_token, sizeof(ConnectionId));
     int bytes_read_now = 0;
     int total_bytes_read = 0;
     char buffer_sock[1024];
-    printf("start reading/writting\n");
+    // printf("start reading/writting\n");
     while( (bytes_read_now=read(file_transfer_socket,buffer_sock, 1024))>0 ){
-//        printf("Bytes:%d\n", bytes_read_now);
+        // printf("Bytes:%d\n", bytes_read_now);
         total_bytes_read+=bytes_read_now;
         write_bytes(my_copy_file, buffer_sock, bytes_read_now);
     }
-    printf("END FETCHING size:%d %s\n\n",total_bytes_read,path_file);
+    printf("(%d bytes) %s\n\n",total_bytes_read,path_file);
     pthread_mutex_lock(&mtx_size_of_files);
     if(num_files_fetched==size_of_array){
         size_of_array+=10;
-        printf("REALLOC!!!\n" );
+        // printf("REALLOC!!!\n" );
         if( ( all_files_size=realloc(all_files_size, sizeof(int)*size_of_array) )==NULL){
             perror("Realloc");
         }
-        printf("DOOOONE\n\n" );
+        // printf("DOOOONE\n\n" );
     }
     all_files_size[num_files_fetched]=total_bytes_read;
     num_files_fetched++;
@@ -168,7 +168,7 @@ int fetch(BufferElement* file_info,char *folder_to_save){
 }
 
 void *worker_thread(void* arg){//takes as argument the dir where to save the files
-    printf("Workder created\n");
+    // printf("Workder created\n");
     if(arg==NULL){
         pthread_exit(NULL);
     }
@@ -180,7 +180,7 @@ void *worker_thread(void* arg){//takes as argument the dir where to save the fil
                 //no workers running and buffer empty
                 pthread_cond_broadcast(&not_empty);
                 pthread_mutex_unlock(&buffer_lock);
-                printf("I guess this the end %ld\n",pthread_self());
+                printf("(Worker)I guess this the end %ld\n",pthread_self());
                 number_of_worker_thread--;
                 pthread_cond_signal(&cond_finished);
                 pthread_exit(NULL);
@@ -192,7 +192,7 @@ void *worker_thread(void* arg){//takes as argument the dir where to save the fil
         pthread_mutex_unlock(&buffer_lock);
         //do the reading
         memcpy(&cur_buffer_elem,&the_buffer.communication_buffer[the_buffer.start],sizeof(BufferElement));
-        printf("(%d)(%d)I supose to fetch %s\n",number_of_active_manager,the_buffer.count,cur_buffer_elem.a_file);
+        // printf("(%d)(%d)I supose to fetch %s\n",number_of_active_manager,the_buffer.count,cur_buffer_elem.a_file);
 
         pthread_mutex_lock(&buffer_lock);
         worker_in--;
@@ -244,59 +244,8 @@ int init_workers(int num_of_workers,char* dir_to_save){
     }
 }
 
-//my creation of mkdir -p
-int create_folders(char *cur,char* next,char* full_path,char* id_str){
-    char* get_cur;
-    char* get_next;
-    if(cur==NULL){//first time
-        printf("First time\n");
-        char* first_cur=strtok_r(full_path,"/",&id_str);//initialize
-        printf("End with init\n" );
-        if(first_cur==NULL)return 0;
-        cur=malloc(sizeof(char)*1024);
-        strcpy(cur, first_cur);
-        char* first_next=strtok_r(NULL,"/",&id_str);//get the cur element
-        if(first_next==NULL){
-            free(cur);
-            return 0;
-        }
-        next=malloc(sizeof(char)*1024);
-        strcpy(next, first_next);
-    }
-
-    if(next==NULL || strlen(next)==0 || next[0]=='\0'){//if there is nothing next it means that this is the file no nead to create
-        free(cur);
-        free(next);
-        return 1;
-    }
-    char the_path[1024];
-    sprintf(the_path, "%s",cur);
-    printf("%s\n",the_path);
-    if(mkdir(the_path, 0777)!=0 && errno!=EEXIST){
-        perror("mkdir ");
-        return 0;
-    }
-
-    char* arg_new_next;
-    char* new_next=strtok_r(NULL,"/",&id_str);
-    arg_new_next=malloc(1024);
-    if(new_next==NULL){
-        arg_new_next[0]='\0';
-    }else{
-        strcpy(arg_new_next, new_next);
-    }
-
-    char* arg_new_cur=malloc(sizeof(char)*1024);
-    sprintf(arg_new_cur, "%s/%s",cur,next);
-    free(cur);
-    free(next);
-    //recursive call to his self with changin the current path to the old one extended with old_next
-    //and new_next to be the new
-    create_folders(arg_new_cur, arg_new_next, full_path, id_str);
-}
-
 void rec_mkdir(const char *dir) {
-    char tmp[256];
+    char tmp[1024];
     char *p = NULL;
     size_t len;
     snprintf(tmp, sizeof(tmp),"%s",dir);
@@ -422,7 +371,7 @@ void *mirror_manager_thread(void* arg){
         //save the network address
         the_buffer.communication_buffer[the_buffer.end].manager_info=malloc(sizeof(*servadd));
         memcpy(the_buffer.communication_buffer[the_buffer.end].manager_info,servadd,sizeof(*servadd));
-        printf("Wrote(manager) %s\n", the_buffer.communication_buffer[the_buffer.end].a_file );
+        // printf("Wrote(manager) %s\n", the_buffer.communication_buffer[the_buffer.end].a_file );
         the_buffer.count++;
 
 
@@ -434,7 +383,7 @@ void *mirror_manager_thread(void* arg){
     }
     number_of_active_manager--;
     pthread_cond_signal(&not_empty);//so if someone waits to place somting wakes up to see that this is the end
-    printf("!!END MIRRO manager  %ld \n",pthread_self());
+    printf("end mirror manager  %ld \n",pthread_self());
     fclose(remote_ls_fp);//close the socket
     pthread_exit(NULL);
 //    write_bytes(initiator_fd,&return_result,sizeof(int));
@@ -552,7 +501,7 @@ int main(int argc, char *argv[]) {
    init_conditions(number_of_elements);
    init_workers(num_of_threads,buff_dirname);
    for (j = 0; j < number_of_elements; j++) {
-       printf("Read one\n");
+    //    printf("Read one\n");
 //get the delay and the port
        read_bytes(initiator_fd, &my_content_servers[j], sizeof(ContentServer));
        my_content_servers[j].dirorfile=NULL;
@@ -574,7 +523,6 @@ int main(int argc, char *argv[]) {
        struct hostent *hosthp;
        hosthp=gethostbyname(my_content_servers[j].name_of_server);
        int return_result;
-       printf("next\n");
    }
    for (i = 0; i < number_of_elements; i++) {
        printf("Adress:%s\t", my_content_servers[i].name_of_server );

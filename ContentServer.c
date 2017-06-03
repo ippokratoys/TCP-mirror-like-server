@@ -143,9 +143,9 @@ void *do_list(void* arg){
         printf("buffer:|%s|\n",buffer);
         write_bytes(server_fd, buffer,strlen(buffer));
     }
-    //finish
-    read_len=0;
-    write(server_fd, &read_len, sizeof(int)); //maybe i need this line
+    // finish
+    // read_len=0;
+    // write(server_fd, &read_len, sizeof(int)); //maybe i need this line
     close(server_fd);
     free(arg);
     pclose(the_list);
