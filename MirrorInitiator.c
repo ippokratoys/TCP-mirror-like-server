@@ -19,6 +19,28 @@ int write_bytes(int fd, void *buff, int size) {
     return sent;
 }
 
+struct hostent* get_hostent(char* host_str){
+    int is_name=0;
+    int i;
+    for (i = 0; i < strlen(host_str); i++) {
+        if( host_str[i]=='.' || (host_str[i]<='9' && host_str[i]>='0') ){
+            ;
+        }else{
+            is_name=1;
+            break;
+        }
+    }
+    if(is_name==1){
+        return gethostbyname(host_str);
+    }else{
+        struct sockaddr_in sa;
+        socklen_t len;
+        inet_aton(host_str,(struct in_addr*)&sa);
+        return gethostbyaddr(&sa, sizeof(sa), AF_INET);
+    }
+}
+
+
 int read_bytes(int fd,void *buff,int size){
     int all_read,now_read=0;
     for(all_read=0;all_read<size;all_read+=now_read){
@@ -112,7 +134,8 @@ int main(int argc,char* argv[]){
         if(strcmp(argv[i], "-n")==0){
             i++;//go to next argument
             if(i==argc)break;//if not exists break
-            mirror_host_net=gethostbyname(argv[i]);//get the host by name
+            // mirror_host_net=gethostbyname(argv[i]);//get the host by name
+            mirror_host_net=get_hostent(argv[i]);
             if(mirror_host_net==NULL){
                 perror("Problem wiht host by name");exit(-1);
             }

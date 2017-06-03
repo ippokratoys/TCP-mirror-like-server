@@ -29,6 +29,26 @@ int read_bytes(int fd,void *buff,int size){
     return all_read;
 }
 
+struct hostent* get_hostent(char* host_str){
+    int is_name=0;
+    int i;
+    for (i = 0; i < strlen(host_str); i++) {
+        if( host_str[i]=='.' || (host_str[i]<='9' && host_str[i]>='0') ){
+            ;
+        }else{
+            is_name=1;
+            break;
+        }
+    }
+    if(is_name==1){
+        return gethostbyname(host_str);
+    }else{
+        struct sockaddr_in sa;
+        socklen_t len;
+        inet_aton(host_str,(struct in_addr*)&sa);
+        return gethostbyaddr(&sa, sizeof(sa), AF_INET);
+    }
+}
 
 
 void perror_exit(char *msg);
@@ -268,10 +288,10 @@ void *mirror_manager_thread(void* arg){
     int my_content_server_sock;
     struct hostent* hosthp;
     struct sockaddr_in*  servadd=malloc(sizeof(struct sockaddr_in)); /* The address of server */
-    hosthp=gethostbyname(my_infos->name_of_server);
+    hosthp=get_hostent(my_infos->name_of_server);
     if(hosthp==NULL){
         return_result=NOT_FOUND;
-        printf("ip NOT ok |%s|\t",my_infos->name_of_server);
+        printf("ip NOT ok |%s|\t",my_infos->name_of_server);fflush(stdout);
         perror("get by name");//MUST CHANGE TTHIS
         pthread_exit(NULL);
         // write_bytes(initiator_fd,&return_result,sizeof(int));
@@ -520,8 +540,8 @@ int main(int argc, char *argv[]) {
        //getchar();
 
        my_content_servers[j].servadd.sin_port=my_content_servers[j].port;
-       struct hostent *hosthp;
-       hosthp=gethostbyname(my_content_servers[j].name_of_server);
+    //    struct hostent *hosthp;
+    //    hosthp=gethostbyname(my_content_servers[j].name_of_server);
        int return_result;
    }
    for (i = 0; i < number_of_elements; i++) {
