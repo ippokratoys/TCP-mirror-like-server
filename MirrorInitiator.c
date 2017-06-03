@@ -142,7 +142,7 @@ int main(int argc,char* argv[]){
     }
     // printf("%d\n", mirror_host_net->h_addrtype==AF_INET);
     printf("Content Servers:%d\n",num_content_servers);
-    for (size_t i = 0; i < num_content_servers; i++) {
+    for (i = 0; i < num_content_servers; i++) {
         printf("Add:%s\tPort:%d \t Dir:%s \t Delay:%d\n",my_content_servers[i].name_of_server,my_content_servers[i].port,my_content_servers[i].dirorfile,my_content_servers[i].delay );
     }
     printf("Ip:%s\n",inet_ntoa( *( (struct in_addr**) mirror_host_net->h_addr_list)[0] ));
@@ -170,7 +170,7 @@ int main(int argc,char* argv[]){
     /* Step 3: send directory name + newline */
     //tels him how many objects he will send
     write_bytes(sock, &num_content_servers, sizeof(int));
-    for (size_t i = 0; i < num_content_servers; i++) {
+    for (i = 0; i < num_content_servers; i++) {
         printf("Sent one\n");
         //write the details of the server(whole struct)
         write_bytes(sock, &my_content_servers[i], sizeof(ContentServer));
