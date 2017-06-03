@@ -137,21 +137,11 @@ void *do_list(void* arg){
     // printf("The find command:%s\n",the_command);
     //do the ls with popen
     FILE* the_list=popen(the_command,"r");
-
-    if(fgets(buffer, 1024, the_list)==NULL){
-        printf("NOOthing\n");
-        //no results found
-    }else if(memcmp(buffer, "find: ", 7)==0){
-        printf("Error?\n");
-        //that means folder not found
-    }else{
-        //somthing found
-        while(fgets(buffer, 1024, the_list)!=NULL){
-            // buffer[strlen(buffer)]='\n';//change the last from "\0" to "\n"
-            if(buffer[0]=='\n' || buffer[0]=='\0')continue;
-            printf("buffer:|%s|\n",buffer);
-            write_bytes(server_fd, buffer,strlen(buffer));
-        }
+    while(fgets(buffer, 1024, the_list)!=NULL){
+        // buffer[strlen(buffer)]='\n';//change the last from "\0" to "\n"
+        if(buffer[0]=='\n' || buffer[0]=='\0')continue;
+        printf("buffer:|%s|\n",buffer);
+        write_bytes(server_fd, buffer,strlen(buffer));
     }
     //finish
     read_len=0;
