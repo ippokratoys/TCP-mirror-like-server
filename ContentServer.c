@@ -77,12 +77,12 @@ void *do_fetch(void *arg){
     int i;
     for ( i = 0; i < num_of_records; i+=2) {
         if(id_delay[i]==token_info.id){
-            printf("I will sleep %d\n", id_delay[i+1]);
+            // printf("thread will sleep for   %d\n", id_delay[i+1]);
             sleep(id_delay[i+1]);
             break;
         }
     }
-    printf("I will send back : %s \t with delay:%d\n",file_to_sent_str,id_delay[i+1]);
+    // printf("I will send back : %s \t with delay:%d\n",file_to_sent_str,id_delay[i+1]);
     // sleep(token_info.delay);
     int file_to_sent_fd=open(file_to_sent_str,O_RDONLY);
     if(file_to_sent_fd<0){
@@ -90,7 +90,6 @@ void *do_fetch(void *arg){
         close(server_fd);
         pthread_exit(NULL);
     }
-    printf("Opened OK\n");
     char filebuffer[1024];
     int num_of_bytes_read=0;
     int total_num_of_bytes=0;
@@ -98,7 +97,7 @@ void *do_fetch(void *arg){
         total_num_of_bytes+=num_of_bytes_read;
         write_bytes(server_fd, filebuffer, num_of_bytes_read);
     }
-    printf("Finished recievi\t SENT:%d\n",total_num_of_bytes);
+    printf("Finished fetching %s SENT:%d\n",file_to_sent_str,total_num_of_bytes);
     close(server_fd);
     free(arg);
     close(file_to_sent_fd);
@@ -140,7 +139,7 @@ void *do_list(void* arg){
     while(fgets(buffer, 1024, the_list)!=NULL){
         // buffer[strlen(buffer)]='\n';//change the last from "\0" to "\n"
         if(buffer[0]=='\n' || buffer[0]=='\0')continue;
-        printf("buffer:|%s|\n",buffer);
+        // printf("buffer:|%s|\n",buffer);
         write_bytes(server_fd, buffer,strlen(buffer));
     }
     // finish
@@ -188,7 +187,7 @@ int main(int argc, char *argv[]) {
     if(bind(l_sock, (struct sockaddr *) &in_all_addr, sizeof(in_all_addr))==-1){
         perror_exit("bind");
     }
-    if(listen(l_sock, 10)==-1){
+    if(listen(l_sock, 100)==-1){
         perror_exit("listen");
     }
     //wait for connection
@@ -199,13 +198,13 @@ int main(int argc, char *argv[]) {
     while(1){
         new_addr=malloc(sizeof(struct sockaddr_in));
         new_sock_len=sizeof(struct sockaddr_in);
-        printf("Waiting for Adress\n");
+        // printf("Waiting for Adress\n");
         int cur_fd=accept(l_sock,(struct sockaddr *) new_addr, &new_sock_len);
         // int cur_fd=accept(l_sock,(struct sockaddr *) NULL, NULL);
         if(cur_fd<0){
             perror_exit("accepting");
         }
-        printf("New connecton from(%d):%s\n",new_sock_len, inet_ntoa(new_addr->sin_addr));
+        // printf("New connecton from(%d):%s\n",new_sock_len, inet_ntoa(new_addr->sin_addr));
         //read the command
         read_bytes(cur_fd,buffer , 6);
         int* send_arg=malloc(sizeof(int));
@@ -225,6 +224,7 @@ int main(int argc, char *argv[]) {
         }
         int dir_len;
         // close(cur_fd);
+        free(new_addr);
         // printf("New thing :%s\n", inet_ntoa(new_addr->sin_addr.s_addr));
     }
     return 0;

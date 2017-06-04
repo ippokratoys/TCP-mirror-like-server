@@ -88,7 +88,7 @@ static pthread_mutex_t mtx_size_of_files=PTHREAD_MUTEX_INITIALIZER;
 int worker_in=0;
 int manager_in=0;
 int first_empty=0;
-#define BUFF_SIZE 100
+#define BUFF_SIZE 50
 typedef struct BufferElement {
     char* a_file;//the full path of the file (or not)
     struct sockaddr_in* manager_info;//the info in order to open a socket
@@ -141,11 +141,17 @@ int fetch(BufferElement* file_info,char *folder_to_save){
         return 1;
     }
     /*connect to the address*/
-    if( connect(file_transfer_socket,(struct sockaddr*) file_info->manager_info, sizeof(*file_info->manager_info))!=0 ){
-        perror("Connecting fetch");
-        close(my_copy_file);
-        close(file_transfer_socket);
-        return 2;
+    int connected=0;
+    while(connected==0){
+        if( connect(file_transfer_socket,(struct sockaddr*) file_info->manager_info, sizeof(*file_info->manager_info))!=0 ){
+            perror("Connecting fetch");
+            // close(my_copy_file);
+            // close(file_transfer_socket);
+            // return 2;
+        }else{
+            connected=1;
+        }
+
     }
     write_bytes(file_transfer_socket, "FETCH", 6);
     int size_of_file=strlen(file_info->a_file)+1;
@@ -168,7 +174,7 @@ int fetch(BufferElement* file_info,char *folder_to_save){
         total_bytes_read+=bytes_read_now;
         write_bytes(my_copy_file, buffer_sock, bytes_read_now);
     }
-    printf("(%d bytes) %s\n\n",total_bytes_read,path_file);
+    // printf("(%d bytes) %s\n\n",total_bytes_read,path_file);
     pthread_mutex_lock(&mtx_size_of_files);
     if(num_files_fetched==size_of_array){
         size_of_array+=10;
@@ -200,7 +206,7 @@ void *worker_thread(void* arg){//takes as argument the dir where to save the fil
                 //no workers running and buffer empty
                 pthread_cond_broadcast(&not_empty);
                 pthread_mutex_unlock(&buffer_lock);
-                printf("(Worker)I guess this the end %ld\n",pthread_self());
+                // printf("(Worker) Finished\n");
                 number_of_worker_thread--;
                 pthread_cond_signal(&cond_finished);
                 pthread_exit(NULL);
@@ -228,7 +234,7 @@ void *worker_thread(void* arg){//takes as argument the dir where to save the fil
         free(cur_buffer_elem.manager_info);
         //free the element AND THE POINTERS
     }
-    printf("Worker thread finished\n");
+    // printf("Worker thread finished\n");
 }
 
 
@@ -311,13 +317,19 @@ void *mirror_manager_thread(void* arg){
         perror("my_content_server_sock");
     }
     //connect to the content server
-    printf("Trying to connect\n");
-    printf("PORT:%d Socket:%d\n",my_infos->port,my_content_server_sock );
-    if( connect( my_content_server_sock, (struct sockaddr*) servadd, sizeof(*servadd) ) ==-1 ){
-        fprintf(stderr, "[%s]\t",my_infos->dirorfile);
-        perror("connect thread");exit(-1);
+    // printf("Trying to connect\n");
+    printf("Trying to connect PORT:%d Socket:%d\n",my_infos->port,my_content_server_sock );
+    int connected=0;
+    while(connected==0){
+        if( connect( my_content_server_sock, (struct sockaddr*) servadd, sizeof(*servadd) ) ==-1 ){
+            fprintf(stderr, "[%s]\t",my_infos->dirorfile);
+            fprintf(stderr, "[%s]\t", inet_ntoa(servadd->sin_addr) );
+            perror("connect thread");
+        }else{
+            connected=1;
+        }
     }
-    printf("DONE!\n");
+    printf("DONE PORT:%d Socket:%d\n",my_infos->port,my_content_server_sock );
     //write the command name
     write_bytes(my_content_server_sock, "LIST ", 6);
     // //write the length of the dir name element
@@ -408,6 +420,7 @@ void *mirror_manager_thread(void* arg){
     pthread_cond_signal(&not_empty);//so if someone waits to place somting wakes up to see that this is the end
     printf("end mirror manager  %ld \n",pthread_self());
     fclose(remote_ls_fp);//close the socket
+    close(my_content_server_sock);
     pthread_exit(NULL);
 //    write_bytes(initiator_fd,&return_result,sizeof(int));
 }
@@ -576,7 +589,7 @@ int main(int argc, char *argv[]) {
        for(i=0;i<num_files_fetched;i++){
            diff_from_mean=(all_files_size[i]-my_statistics.average)*(all_files_size[i]-my_statistics.average);
 
-           printf("%d)%d\n",i,all_files_size[i] );
+        //    printf("%d)%d\n",i,all_files_size[i] );
        }
        my_statistics.distribution=diff_from_mean/num_files_fetched;
    }
@@ -587,7 +600,7 @@ int main(int argc, char *argv[]) {
    perror("shutdown");
    close(lsock);
    free(all_files_size);
-   pthread_exit(NULL);
+   exit(0);
 }
 
 
