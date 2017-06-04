@@ -263,21 +263,24 @@ int init_workers(int num_of_workers,char* dir_to_save){
         pthread_detach(thr_p);
     }
 }
-
+//creates directory recursively
+//same with mkdir -p
 void rec_mkdir(const char *dir) {
     char tmp[1024];
     char *p = NULL;
     size_t len;
     snprintf(tmp, sizeof(tmp),"%s",dir);
     len = strlen(tmp);
-    if(tmp[len - 1] == '/')
-            tmp[len - 1] = 0;
-    for(p = tmp + 1; *p; p++)
-            if(*p == '/') {
-                    *p = 0;
-                    mkdir(tmp, S_IRWXU);
-                    *p = '/';
-            }
+    if(tmp[len - 1] == '/'){
+        tmp[len - 1] = 0;
+    }
+    for(p = tmp + 1; *p; p++){
+        if(*p == '/') {
+            *p = 0;
+            mkdir(tmp, S_IRWXU);
+            *p = '/';
+        }
+    }
     mkdir(tmp, S_IRWXU);
 }
 
@@ -495,7 +498,7 @@ int main(int argc, char *argv[]) {
     }
     printf("sock:%d\n",lsock );
     /** listen for connections with Qsize=5 **/
-    if ( listen(lsock, 13) != 0 ){
+    if ( listen(lsock, 20) != 0 ){
         perror_exit( "listen" );
     }
     /* accept connection, ignore client address */
